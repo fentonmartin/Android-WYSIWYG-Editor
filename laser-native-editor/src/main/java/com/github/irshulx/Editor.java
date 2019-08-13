@@ -22,8 +22,10 @@ import android.text.Editable;
 import android.util.AttributeSet;
 import android.view.KeyEvent;
 import android.view.View;
+import android.widget.LinearLayout;
 
 import com.github.irshulx.Components.CustomEditText;
+import com.github.irshulx.models.EditorControl;
 import com.github.irshulx.models.EditorTextStyle;
 import com.github.irshulx.models.EditorContent;
 import com.github.irshulx.models.RenderType;
@@ -58,15 +60,15 @@ public class Editor extends EditorCore {
     }
 
     public String getContentAsHTML() {
-        return getHtmlExtensions().getContentAsHTML();
+        return getHTMLContent();
     }
 
     public String getContentAsHTML(EditorContent content) {
-        return getHtmlExtensions().getContentAsHTML(content);
+        return getHTMLContent(content);
     }
 
     public String getContentAsHTML(String editorContentAsSerialized) {
-        return getHtmlExtensions().getContentAsHTML(editorContentAsSerialized);
+        return getHTMLContent(editorContentAsSerialized);
     }
 
     public void render(EditorContent _state) {
@@ -79,7 +81,7 @@ public class Editor extends EditorCore {
 
     public void render() {
         if (getRenderType() == RenderType.Editor) {
-            getInputExtensions().insertEditText(0, this.placeHolder, null);
+            getInputExtensions().insertEditText(0, this.getPlaceHolder(), null);
         }
     }
 
@@ -91,7 +93,7 @@ public class Editor extends EditorCore {
     public void clearAllContents() {
         super.clearAllContents();
         if (getRenderType() == RenderType.Editor) {
-            getInputExtensions().insertEditText(0, this.placeHolder, null);
+            getInputExtensions().insertEditText(0, this.getPlaceHolder(), null);
         }
     }
 //
@@ -288,24 +290,6 @@ public class Editor extends EditorCore {
     }
 
 
-        /*
-         *
-         * Map Extension
-         *
-         */
-
-    public void setMapViewLayout(int layout) {
-        this.getMapExtensions().setMapViewTemplate(layout);
-    }
-
-    public void insertMap() {
-        getMapExtensions().loadMapActivity();
-    }
-
-    public void insertMap(String Cords) {
-        getMapExtensions().insertMap(Cords, null, true);
-    }
-
     @Override
     public boolean onKey(View v, int keyCode, KeyEvent event, CustomEditText editText) {
         boolean onKey = super.onKey(v, keyCode, event, editText);
@@ -320,5 +304,9 @@ public class Editor extends EditorCore {
 
     public void setListItemLineSpacing(float lineSpacing){
         this.getListItemExtensions().setLineSpacing(lineSpacing);
+    }
+
+    public void insertMacro(String name, View view, Map<String,Object> settings) {
+        this.getMacroExtensions().insertMacro(name, view, settings, -1);
     }
 }

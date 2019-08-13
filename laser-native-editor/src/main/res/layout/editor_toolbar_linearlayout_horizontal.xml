@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
+    android:fadingEdge="horizontal"
+    android:fadingEdgeLength="20dp"
+    android:requiresFadingEdge="horizontal"
     android:layout_height="wrap_content"
     android:orientation="horizontal">
 
@@ -78,6 +81,16 @@
         android:src="@drawable/icon_outdent" />
 
     <ImageButton
+        android:id="@+id/action_blockquote"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="@android:color/transparent"
+        android:maxHeight="20dp"
+        android:maxWidth="20dp"
+        android:src="@drawable/ic_blockquote" />
+
+
+    <ImageButton
         android:id="@+id/action_color"
         android:layout_width="40dp"
         android:layout_height="40dp"
@@ -137,14 +150,15 @@
         android:maxWidth="20dp"
         android:src="@drawable/icon_link" />
 
-    <ImageButton
-        android:id="@+id/action_map"
-        android:layout_width="40dp"
-        android:layout_height="40dp"
-        android:background="@android:color/transparent"
-        android:maxHeight="20dp"
-        android:maxWidth="20dp"
-        android:src="@drawable/icon_marker" />
+    <!--<ImageButton-->
+        <!--android:id="@+id/action_map"-->
+        <!--android:layout_width="40dp"-->
+        <!--android:layout_height="40dp"-->
+        <!--android:background="@android:color/transparent"-->
+        <!--android:maxHeight="20dp"-->
+        <!--android:maxWidth="20dp"-->
+        <!--android:src="@drawable/icon_marker" />-->
+
 
     <!--<ImageButton-->
         <!--android:id="@+id/action_html"-->

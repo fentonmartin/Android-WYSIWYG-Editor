@@ -1,6 +1,6 @@
 
 
-[ ![Download](https://api.bintray.com/packages/irshu/maven/laser-native-editor/images/download.svg) ](https://bintray.com/irshu/maven/laser-native-editor/_latestVersion)&nbsp;![enter image description here](https://img.shields.io/badge/issues-18-red.svg)
+[ ![Download](https://api.bintray.com/packages/irshu/maven/laser-native-editor/images/download.svg) ](https://bintray.com/irshu/maven/laser-native-editor/_latestVersion)&nbsp;![enter image description here](https://img.shields.io/badge/issues-16-yellow.svg)&nbsp;[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 Android-WYSIWYG-Editor
 ===================
@@ -12,6 +12,23 @@ An iframe free text editor that uses native components in the content tree. Moti
 
 
 ## Changelog
+
+## [3.0.4 - 30 July 2019]
+
+ - Updates glide to 4.9.0
+
+
+## [3.0.3 - 20 December 2018]
+
+ - **Introducing Macro's** - Macro's are equivalent to components in react/vue.js. 
+It lets you add a custom block into the editor where you get to control what gets rendered into the editor. Read more about this below on Macro's section.
+
+- Add blockquote support
+
+- Replaced image loader library **Picasso** with **Glide**, so to make use of it's rich customization api.
+ 
+- An improved editor navigation.
+
 
 ## [2.3.2 - 01 December 2018]
 
@@ -30,14 +47,14 @@ Download
 ------------
 gradle:
 
-    compile 'com.github.irshulx:laser-native-editor:2.3.2'
+    compile 'com.github.irshulx:laser-native-editor:3.0.3'
 
 or maven:
 
     <dependency>
       <groupId>com.github.irshulx</groupId>
       <artifactId>laser-native-editor</artifactId>
-      <version>2.3.2</version>
+      <version>3.0.3</version>
       <type>pom</type>
     </dependency>
 
@@ -65,20 +82,20 @@ Features
 
  - **Integration with web based WYSIWYG's:** HTMLParser helps the Editor to work seemlessly with the WYSIWYG editor on your web platform.
 
-The editor is built, so that every part of the design have been exposed and is available for customization. You can define, how the editor should look like, and what are the controls, that should be available (the controls toolbar layout can also be created by yourself, just call the API methods on the click event).
+The editor is built, so that every part of the design have been exposed and is available for customization.
 
 **Available Controls:**
 
 | Control     | Usage |
 | :------- | :-----: |
 | `H1`,  `H2` and `H3` | Insert Headings |
+| `Blockquote` | Insert a blockquote |
 | `Bold`, `Italic`,`Color`, `Intent` & `Outdent`    | Format the text   |
 | `Image Picker`| Insert Images to the editor from storage or a URL    |
 | `Hyperlinks` | Add Links to the editor
 |`Location Selector` | Use the embedded map editor to tag and insert locations to the editor |
 |`Numbered` and `Bulleted` Lists | Let's you created Unorderd and Ordered lists |
-|`Line Divider` | Add a divider among paragraphs or Headings
-|`Clear Content` | Remove all contents from the editor
+|`Line Divider` | Add a divider
 
 
 
@@ -203,13 +220,7 @@ For a complete overview of the implementation, please take a look at [EditorTest
                 editor.insertLink();
             }
         });
-
-        findViewById(R.id.action_map).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                editor.insertMap();
-            }
-        });
+	
 
         findViewById(R.id.action_erase).setOnClickListener(new View.OnClickListener() {
             @Override
@@ -217,12 +228,21 @@ For a complete overview of the implementation, please take a look at [EditorTest
                 editor.clearAllContents();
             }
         });
+	
+	findViewById(R.id.action_blockquote).setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                editor.updateTextStyle(EditorTextStyle.BLOCKQUOTE);
+            }
+        });
+        
+        editor.render();
+        
     }
-    editor.render(); 
 
 
 
-If you are using **Image Pickers** or **Map Marker Pickers**, Add the following into your **Activity**:
+If you are using **Image Pickers**,  Add the following into your **Activity**:
 
 
          @Override
@@ -239,9 +259,6 @@ If you are using **Image Pickers** or **Map Marker Pickers**, Add the following 
         else if (resultCode == Activity.RESULT_CANCELED) {
            // editor.RestoreState();
         }
-        else if(requestCode== editor.MAP_MARKER_REQUEST){
-            editor.insertMap(data.getStringExtra("cords"));
-        }
     }
 
 You can also programmatically append text into the editor using HTML like so:
@@ -252,6 +269,7 @@ Please be reminded, nested HTML **ARE NOT** supported at the moment except for `
 
  - `<p>`,`<div>`
  - `<h1>`,`<h2>`,`<h3>`
+ - `<blockquote>`
  - `<img>`
  - `<ul>`,`<ol>`
  - `<hr/>`
@@ -275,7 +293,7 @@ API
  - `getContentAsHTML();` returns the editor content in HTML format.
 
  - `updateTextStyle(EditorTextStyle style);` Update the text style for
-   the currently active block. Possible values are `H1,H2,H3,BOLD,ITALIC,INDENT and OUTDENT` .
+   the currently active block. Possible values are `H1,H2,H3,BOLD,ITALIC,BLOCKQUOTE,INDENT and OUTDENT` .
 
  - `setH1TextSize(int size), setH2TextSize(int size) and setH3TextSize(int size);` Override the existing text sizes. There are getter methods as well to retrieve the existing text sizes for each.
 
@@ -283,7 +301,9 @@ API
 
  - `setLineSpacing(float value);` Sets the linespace for the editor.
  
- - `editor.setEditorTextColor("#FF3333");` Sets the global text color of the editor (default is #000000).
+ - `setEditorTextColor("#FF3333");` Sets the global text color of the editor (default is #000000).
+ 
+ - `updateTextColor("#FF3333");` Changes the text color of the focused text.
 
  - `openImagePicker();` Opens up the image picker. Once the user has selected the image, it's automatically inserted to the editor. But you must configure a remote URL ,where you want the image to be uploaded. If the Remote URL is not specifed, the image is not persisted.
 
@@ -294,15 +314,12 @@ API
  - `insertList(boolean isOrdered);`Insert an Ordered or Unordered List.
 
  - `setListItemLayout(int layout);` Override the default layout for list items.
+ 
+ - `insertMacro(String name,View view, Map<String, Object> props);` Insert macro(custom component).
 
  - `insertDivider();` Insert a line divider
 
  - `setDividerLayout(int layout);` Override the default layout for dividers
-
- - `insertMap():` Fires up the google map location picker activity. Once the user has selected the location, the library will automatically insert the marker with the location into editor.
-
- - `insertMap(String Cords);` Insert the marker into the editor. The cordinates must be of string form,  `"LAT,LNG"`
- - `setMapViewLayout(int layout);` Override the default layout for maps in the editor
 
 If you are using image uploads, use the below to add the uploaded image to editor:
 
@@ -319,6 +336,53 @@ If you are using image uploads, use the below to add the uploaded image to edito
                    // editor.onImageUploadFailed(uuid);
                 }
             });
+
+## Macro's ##
+
+A macro is equivalent to a component in react/vue.js. 
+
+for eg: 
+In vue, you define a component `author-tag` as:
+
+
+     Vue.component('author-tag', {  
+         props: ['author-name', 'date'],
+         template: '<div>
+                      <span class="name" {{author-name}}></span>
+                      <span class="date" {{date}}></span>
+                   </div>'  
+        });
+
+You can then use this component as a custom HTML element in your markup:
+
+    <author-tag author-name="Thomas Isaac" date="12 July 2018">
+    </author-tag>
+
+When a **custom html tag** is found on the HTML text that's fed to the editor,  `View onRenderMacro(String name, Map<String, Object> props, int index);` will be invoked. All you need to do is to inflate your custom view created to handle `author-tag` and return that view to the editor: 
+
+    editor.setEditorListener(new EditorListener() {
+	    ...
+	    @Override  
+	    public View onRenderMacro(String name, Map<String, Object> props, int index) {  
+	        View layout = getLayoutInflater().inflate(R.layout.layout_authored_by, null);  
+	        TextView lblName = layout.findViewById(R.id.lbl_author_name);
+	        lblName.setText(props.get("author-name"));
+		return layout;  
+	     }
+    });
+To insert a macro, use:
+
+    private void insertAuthorMacro() {  
+      View layout = getLayoutInflater().inflate(R.layout.layout_authored_by, null);  
+      Map<String, Object> props = new HashMap<>();  
+      props.put("author-name", "Thomas Isaac");  
+      props.put("date","12 July 2018");  
+      editor.insertMacro("author-tag",layout, props);  
+    }
+
+When content is extracted using `editor.getContentAsHTML();` the html string will contain:
+
+    "<author-tag author-name=\"Thomas Isaac\" date=\"12 July 2018\"></author-tag>"
 
 ## Custom Fonts ##
 
@@ -394,9 +458,7 @@ Future Plans
 -------------------
 
 
- - Insert quotes.
- 
- - Improve and add more callbacks.
+ - Add videos support
  
  - Address the issues and feature requests from fellow devs.
 
@@ -404,6 +466,13 @@ Contributions are much appreciated, feel free to fork and customize for your nee
 
 If you come across any bugs or needs, please mention it on issues, i will address it and resolve it the latest possible.
 
+Libraries Used
+-------------------
+
+ - Glide, Gson, Jsoup
+ 
+ 
+ 
 
 ## License
 

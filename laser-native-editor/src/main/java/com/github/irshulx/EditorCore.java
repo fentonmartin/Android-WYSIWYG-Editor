@@ -6,6 +6,8 @@ import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.graphics.Point;
+import android.graphics.Rect;
+import android.preference.PreferenceManager;
 import android.text.Editable;
 import android.text.Html;
 import android.text.TextUtils;
@@ -14,6 +16,7 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.Display;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.LinearLayout;
@@ -21,21 +24,29 @@ import android.widget.TableLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.github.irshulx.Components.ComponentsWrapper;
 import com.github.irshulx.Components.CustomEditText;
 import com.github.irshulx.Components.DividerExtensions;
 import com.github.irshulx.Components.HTMLExtensions;
 import com.github.irshulx.Components.ImageExtensions;
 import com.github.irshulx.Components.InputExtensions;
 import com.github.irshulx.Components.ListItemExtensions;
+import com.github.irshulx.Components.MacroExtensions;
 import com.github.irshulx.Components.MapExtensions;
+import com.github.irshulx.Utilities.Utilities;
 import com.github.irshulx.models.EditorContent;
 import com.github.irshulx.models.EditorControl;
 import com.github.irshulx.models.EditorTextStyle;
 import com.github.irshulx.models.EditorType;
+import com.github.irshulx.models.HtmlTag;
 import com.github.irshulx.models.Node;
 import com.github.irshulx.models.Op;
 import com.github.irshulx.models.RenderType;
 import com.google.gson.Gson;
+
+import org.jsoup.Jsoup;
+import org.jsoup.nodes.Document;
+import org.jsoup.nodes.Element;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,27 +56,10 @@ import java.util.regex.Pattern;
 /**
  * Created by mkallingal on 4/30/2016.
  */
-public class EditorCore extends LinearLayout {
+public class EditorCore extends LinearLayout implements View.OnTouchListener {
     public static final String TAG = "EDITOR";
-    /*
-    * EditText initializors
-    */
-    public String placeHolder = null;
-    public boolean autoFocus = true;
-    private boolean serialRenderInProgress = false;
-    /*
-    * Divider initializors
-    */
-    private final String SHAREDPREFERENCE = "QA";
-    private Context context;
-    protected LinearLayout parentView;
-    private RenderType renderType;
-    private Resources resources;
-    private View activeView;
-    private Gson gson;
-    private Utilities utilities;
     private EditorListener listener;
-    public final int MAP_MARKER_REQUEST = 20;
+    private final int MAP_MARKER_REQUEST = 20;
     public final int PICK_IMAGE_REQUEST = 1;
     private InputExtensions inputExtensions;
     private ImageExtensions imageExtensions;
@@ -73,30 +67,131 @@ public class EditorCore extends LinearLayout {
     private DividerExtensions dividerExtensions;
     private HTMLExtensions htmlExtensions;
     private MapExtensions mapExtensions;
-    private boolean stateFresh;
+    private MacroExtensions macroExtensions;
+    private EditorSettings editorSettings;
+    private ComponentsWrapper componentsWrapper;
+
 
     public EditorCore(Context _context, AttributeSet attrs) {
         super(_context, attrs);
-        this.context = _context;
+        editorSettings = EditorSettings.init(_context, this);
         this.setOrientation(VERTICAL);
-        initialize(_context, attrs);
-
+        initialize(attrs);
+        onPostInit();
     }
 
-    private void initialize(Context context, AttributeSet attrs) {
+    private void onPostInit() {
+        if(getRenderType() == RenderType.Editor) {
+            setOnTouchListener(this);
+        }
+    }
+
+    private void initialize(AttributeSet attrs) {
         loadStateFromAttrs(attrs);
-        utilities = new Utilities();
-        this.stateFresh = true;
-        this.resources = context.getResources();
-        gson = new Gson();
         inputExtensions = new InputExtensions(this);
         imageExtensions = new ImageExtensions(this);
         listItemExtensions = new ListItemExtensions(this);
         dividerExtensions = new DividerExtensions(this);
         mapExtensions = new MapExtensions(this);
         htmlExtensions = new HTMLExtensions(this);
-        this.parentView = this;
+        macroExtensions = new MacroExtensions(this);
+        componentsWrapper =new ComponentsWrapper.Builder()
+                .inputExtensions(inputExtensions)
+                .htmlExtensions(htmlExtensions)
+                .dividerExtensions(dividerExtensions)
+                .imageExtensions(imageExtensions)
+                .listItemExtensions(listItemExtensions)
+                .macroExtensions(macroExtensions)
+                .mapExtensions(mapExtensions)
+                .build();
+        macroExtensions.init(componentsWrapper);
+        dividerExtensions.init(componentsWrapper);
+        inputExtensions.init(componentsWrapper);
+        imageExtensions.init(componentsWrapper);
+        listItemExtensions.init(componentsWrapper);
+        mapExtensions.init(componentsWrapper);
     }
+
+
+    public void ___onViewTouched(int hotspot, int viewPosition){
+        if(hotspot == 0){
+            if(!inputExtensions.isInputTextAtPosition(viewPosition-1)) {
+                inputExtensions.insertEditText(viewPosition, null, null);
+            }else{
+                Log.d(TAG, "not adding another edittext since already an edittext on the top");
+            }
+        }else if(hotspot ==1){
+            if(!inputExtensions.isInputTextAtPosition(viewPosition+1)) {
+                inputExtensions.insertEditText(viewPosition + 1, null, null);
+            }else{
+                Log.d(TAG, "not adding another edittext since already an edittext below");
+            }
+        }
+    }
+
+    public void ___onViewTouched(View view, MotionEvent motionEvent){
+        int position = -1;
+        for(int i = 0; i< getChildCount() ; i++){
+            boolean withinBound = isViewInBounds(getChildAt(i), motionEvent.getX(), motionEvent.getY());
+            if(withinBound){
+                position = i;
+            }
+        }
+
+//        if(position !=-1){
+//            View tappedView = getChildAt(position);
+//            //now find where was clicked, top or bottom,
+//            int top = tappedView.getTop();
+//            int bottom = tappedView.getBottom();
+//            int tapped = (int) motionEvent.getY();
+//
+//            int topDiff = Math.abs((tapped - top));
+//            int bottomDiff = Math.abs((bottom - tapped));
+//
+//            if(bottomDiff > topDiff){
+//                //clicked on top
+//                //check if previous is edittext, if so do nothing, or else insert an edittext
+//                if(!inputExtensions.isInputTextAtPosition(position-1)) {
+//                    inputExtensions.insertEditText(position, null, null);
+//                }else{
+//                    Log.d(TAG, "not adding another edittext since already an edittext on the top");
+//                }
+//            }else{
+//                //clicked on bottom
+//                //check if next is edittext,do nothing, or else inser an edittext right after this view
+//                if(!inputExtensions.isInputTextAtPosition(position+1)) {
+//                    inputExtensions.insertEditText(position + 1, null, null);
+//                }else{
+//                    Log.d(TAG, "not adding another edittext since already an edittext below");
+//                }
+//            }
+//
+//        }
+
+        if(position == -1){
+             boolean doInsert = true;
+             if(getControlType(getChildAt(getChildCount() - 1)) == EditorType.INPUT){
+                 CustomEditText editText = (CustomEditText) getChildAt(getChildCount() - 1);
+                 if(TextUtils.isEmpty(editText.getText())){
+                     doInsert = false;
+                 }
+             }
+             if(doInsert)
+                inputExtensions.insertEditText(getChildCount(), null, null);
+        }
+    }
+
+    private boolean isViewInBounds(View view, float x, float y){
+
+        Rect outRect = new Rect(view.getLeft(), view.getTop(), view.getRight(), view.getBottom());
+
+        if(outRect.contains((int)x, (int)y))
+        {
+            return true;
+        }
+        return false;
+    }
+
 
     //region Getters_and_Setters
 
@@ -112,7 +207,7 @@ public class EditorCore extends LinearLayout {
      * @return
      */
     public Activity getActivity() {
-        return (Activity) this.context;
+        return (Activity) this.editorSettings.context;
     }
 
     /**
@@ -121,7 +216,7 @@ public class EditorCore extends LinearLayout {
      * @return
      */
     public LinearLayout getParentView() {
-        return this.parentView;
+        return this.editorSettings.parentView;
     }
 
     /**
@@ -130,7 +225,7 @@ public class EditorCore extends LinearLayout {
      * @return
      */
     public int getParentChildCount() {
-        return this.parentView.getChildCount();
+        return this.editorSettings.parentView.getChildCount();
     }
 
     /**
@@ -139,7 +234,7 @@ public class EditorCore extends LinearLayout {
      * @return
      */
     public RenderType getRenderType() {
-        return this.renderType;
+        return this.editorSettings.renderType;
     }
 
     /**
@@ -148,7 +243,7 @@ public class EditorCore extends LinearLayout {
      * @return
      */
     public Resources getResources() {
-        return this.resources;
+        return this.editorSettings.resources;
     }
 
     /**
@@ -157,16 +252,13 @@ public class EditorCore extends LinearLayout {
      * @return
      */
     public View getActiveView() {
-        return this.activeView;
+        return this.editorSettings.activeView;
     }
 
     public void setActiveView(View view) {
-        this.activeView = view;
+        this.editorSettings.activeView = view;
     }
 
-    public Utilities getUtilitiles() {
-        return this.utilities;
-    }
 
     public EditorListener getEditorListener() {
         return this.listener;
@@ -181,28 +273,31 @@ public class EditorCore extends LinearLayout {
      * Getters and setters for  extensions
      *
      */
-    public InputExtensions getInputExtensions() {
+    protected InputExtensions getInputExtensions() {
         return this.inputExtensions;
     }
 
-    public ImageExtensions getImageExtensions() {
+    protected ImageExtensions getImageExtensions() {
         return this.imageExtensions;
     }
 
-    public MapExtensions getMapExtensions() {
+    protected MapExtensions getMapExtensions() {
         return this.mapExtensions;
     }
 
-    public HTMLExtensions getHtmlExtensions() {
+    protected HTMLExtensions getHtmlExtensions() {
         return this.htmlExtensions;
     }
 
-    public ListItemExtensions getListItemExtensions() {
+    protected ListItemExtensions getListItemExtensions() {
         return this.listItemExtensions;
     }
 
-    public DividerExtensions getDividerExtensions() {
+    protected DividerExtensions getDividerExtensions() {
         return this.dividerExtensions;
+    }
+    protected MacroExtensions getMacroExtensions() {
+        return macroExtensions;
     }
 /*
  *
@@ -212,6 +307,223 @@ public class EditorCore extends LinearLayout {
 
     //endregion
 
+
+    /*
+    Used by Editor
+     */
+    protected String getContentAsSerialized() {
+        EditorContent state = getContent();
+        return serializeContent(state);
+    }
+
+    protected String getContentAsSerialized(EditorContent state) {
+        return serializeContent(state);
+    }
+
+    protected EditorContent getContentDeserialized(String EditorContentSerialized) {
+        EditorContent Deserialized = this.editorSettings.gson.fromJson(EditorContentSerialized, EditorContent.class);
+        return Deserialized;
+    }
+
+    protected String serializeContent(EditorContent _state) {
+        String serialized = this.editorSettings.gson.toJson(_state);
+        return serialized;
+    }
+
+
+    protected EditorContent getContent() {
+
+        if (this.editorSettings.renderType == RenderType.Renderer) {
+            Utilities.toastItOut(this.getContext(),"This option only available in editor mode");
+            return null;
+        }
+
+        int childCount =this.editorSettings.parentView.getChildCount();
+        EditorContent editorState = new EditorContent();
+        List<Node> list = new ArrayList<>();
+        for (int i = 0; i < childCount; i++) {
+            View view = this.editorSettings.parentView.getChildAt(i);
+            Node node = getNodeInstance(view);
+            switch (node.type) {
+                case INPUT:
+                    node = getInputExtensions().getContent(view);
+                    list.add(node);
+                    break;
+                case img:
+                    node = getImageExtensions().getContent(view);
+                    list.add(node);
+                    //field type, content[]
+                    break;
+                case hr:
+                    node = getDividerExtensions().getContent(view);
+                    list.add(node);
+                    break;
+                case ul:
+                case ol:
+                    node =getListItemExtensions().getContent(view);
+                    list.add(node);
+                    break;
+                case map:
+                    node = getMapExtensions().getContent(view);
+                    list.add(node);
+                    break;
+                case macro:
+                    node = getMacroExtensions().getContent(view);
+                    list.add(node);
+                    break;
+            }
+        }
+        editorState.nodes = list;
+        return editorState;
+    }
+
+
+    protected void renderEditor(EditorContent _state) {
+        this.editorSettings.parentView.removeAllViews();
+        this.editorSettings.serialRenderInProgress  = true;
+        for (Node item : _state.nodes) {
+            switch (item.type) {
+                case INPUT:
+                    inputExtensions.renderEditorFromState(item, _state);
+                    break;
+                case hr:
+                    dividerExtensions.renderEditorFromState(item, _state);
+                    break;
+                case img:
+                    imageExtensions.renderEditorFromState(item, _state);
+                    break;
+                case ul:
+                case ol:
+                    getListItemExtensions().renderEditorFromState(item, _state);
+                    break;
+                case map:
+                    mapExtensions.renderEditorFromState(item, _state);
+                    break;
+                case macro:
+                    macroExtensions.renderEditorFromState(item, _state);
+                    break;
+            }
+        }
+        this.editorSettings.serialRenderInProgress = false;
+    }
+
+    protected void parseHtml(String htmlString) {
+        Document doc = Jsoup.parse(htmlString);
+        for (Element element : doc.body().children()) {
+            if (!HTMLExtensions.matchesTag(element.tagName().toLowerCase())){
+                String tag = element.attr("data-tag");
+                if(!tag.equals("macro")){
+                    continue;
+                }
+            }
+            buildNodeFromHTML(element);
+        }
+    }
+
+    private void buildNodeFromHTML(Element element) {
+        String text;
+
+        String macroTag = element.attr("data-tag");
+        if(macroTag.equals("macro")){
+            macroExtensions.buildNodeFromHTML(element);
+            return;
+        }
+
+        HtmlTag tag = HtmlTag.valueOf(element.tagName().toLowerCase());
+        int count = getParentView().getChildCount();
+
+        if ("br".equals(tag.name()) ||"<br>".equals(element.html().replaceAll("\\s+", "")) || "<br/>".equals(element.html().replaceAll("\\s+", ""))) {
+            inputExtensions.insertEditText(count, null, null);
+            return;
+        } else if ("hr".equals(tag.name()) || "<hr>".equals(element.html().replaceAll("\\s+", "")) || "<hr/>".equals(element.html().replaceAll("\\s+", ""))) {
+            getDividerExtensions().buildNodeFromHTML(element);
+            return;
+        }
+
+        switch (tag) {
+            case h1:
+            case h2:
+            case h3:
+            case p:
+            case blockquote:
+                inputExtensions.buildNodeFromHTML(element);
+                break;
+            case ul:
+            case ol:
+                listItemExtensions.buildNodeFromHTML(element);
+                break;
+            case img:
+                imageExtensions.buildNodeFromHTML(element);
+                break;
+            case div:
+                String dataTag = element.attr("data-tag");
+                if (dataTag.equals("img")) {
+                    imageExtensions.buildNodeFromHTML(element);
+                }else{
+                    inputExtensions.buildNodeFromHTML(element);
+                }
+                break;
+
+        }
+    }
+
+    protected String getHTMLContent() {
+        EditorContent content = getContent();
+        return getHTMLContent(content);
+    }
+
+    protected String getHTMLContent(EditorContent content) {
+        StringBuilder htmlBlock = new StringBuilder();
+        String html;
+        for (Node item : content.nodes) {
+            switch (item.type) {
+                case INPUT:
+                    html = inputExtensions.getContentAsHTML(item, content);
+                    htmlBlock.append(html);
+                    break;
+                case img:
+                    String imgHtml = getImageExtensions().getContentAsHTML(item, content);
+                    htmlBlock.append(imgHtml);
+                    break;
+                case hr:
+                    htmlBlock.append(dividerExtensions.getContentAsHTML(item, content));
+                    break;
+                case map:
+                    String htmlMap = mapExtensions.getContentAsHTML(item,content);
+                    htmlBlock.append(htmlMap);
+                    break;
+                case ul:
+                case ol:
+                    htmlBlock.append(listItemExtensions.getContentAsHTML(item, content));
+                    break;
+                case macro:
+                    htmlBlock.append(macroExtensions.getContentAsHTML(item, content));
+                    break;
+            }
+        }
+        return htmlBlock.toString();
+    }
+
+    protected String getHTMLContent(String editorContentAsSerialized) {
+        EditorContent content = getContentDeserialized(editorContentAsSerialized);
+        return getHTMLContent(content);
+    }
+
+
+    protected void renderEditorFromHtml(String content) {
+        this.editorSettings.serialRenderInProgress = true;
+        parseHtml(content);
+        this.editorSettings.serialRenderInProgress = false;
+    }
+
+    protected void clearAllContents() {
+        this.editorSettings.parentView.removeAllViews();
+
+    }
+
+
+
+
     private void loadStateFromAttrs(AttributeSet attributeSet) {
         if (attributeSet == null) {
             return; // quick exit
@@ -220,13 +532,13 @@ public class EditorCore extends LinearLayout {
         TypedArray a = null;
         try {
             a = getContext().obtainStyledAttributes(attributeSet, R.styleable.editor);
-            this.placeHolder = a.getString(R.styleable.editor_placeholder);
-            this.autoFocus = a.getBoolean(R.styleable.editor_auto_focus, true);
+            this.editorSettings.placeHolder = a.getString(R.styleable.editor_placeholder);
+            this.editorSettings.autoFocus = a.getBoolean(R.styleable.editor_auto_focus, true);
             String renderType = a.getString(R.styleable.editor_render_type);
             if (TextUtils.isEmpty(renderType)) {
-                this.renderType = com.github.irshulx.models.RenderType.Editor;
+                this.editorSettings.renderType = com.github.irshulx.models.RenderType.Editor;
             } else {
-                this.renderType = renderType.toLowerCase().equals("renderer") ? RenderType.Renderer : RenderType.Editor;
+                this.editorSettings.renderType = renderType.toLowerCase().equals("renderer") ? RenderType.Renderer : RenderType.Editor;
             }
 
         } finally {
@@ -243,16 +555,16 @@ public class EditorCore extends LinearLayout {
      * @return
      */
     public int determineIndex(EditorType type) {
-        int size = this.parentView.getChildCount();
-        if (this.renderType == RenderType.Renderer)
+        int size = this.editorSettings.parentView.getChildCount();
+        if (this.editorSettings.renderType == RenderType.Renderer)
             return size;
-        View _view = this.activeView;
+        View _view = this.editorSettings.activeView;
         if (_view == null)
             return size;
-        int currentIndex = this.parentView.indexOfChild(_view);
+        int currentIndex = this.editorSettings.parentView.indexOfChild(_view);
         EditorType tag = getControlType(_view);
         if (tag == EditorType.INPUT) {
-            int length = ((EditText) this.activeView).getText().length();
+            int length = ((EditText) this.editorSettings.activeView).getText().length();
             if (length > 0) {
                 return type == EditorType.UL_LI || type == EditorType.OL_LI ? currentIndex : currentIndex;
             } else {
@@ -326,7 +638,7 @@ public class EditorCore extends LinearLayout {
     }
 
     public void deleteFocusedPrevious(EditText view) {
-        int index = parentView.indexOfChild(view);
+        int index = this.editorSettings.parentView.indexOfChild(view);
         if (index == 0)
             return;
         EditorControl contentType = (EditorControl) ((View) view.getParent()).getTag();
@@ -342,15 +654,13 @@ public class EditorCore extends LinearLayout {
             return;
         }
 
-        View toFocus = parentView.getChildAt(index - 1);
+        View toFocus = this.editorSettings.parentView.getChildAt(index - 1);
         EditorControl control = (EditorControl) toFocus.getTag();
 
         /**
          * If its an image or map, do not delete edittext, as there is nothing to focus on after image
          */
-        if (control.Type == EditorType.img || control.Type == EditorType.map) {
-            return;
-        }
+
         /*
          *
          * If the person was on edittext,  had removed the whole text, we need to move into the previous line
@@ -363,7 +673,7 @@ public class EditorCore extends LinearLayout {
          * previous node on the editor is a list, set focus to its inside
          *
          */
-            this.parentView.removeView(view);
+            this.editorSettings.parentView.removeView(view);
             listItemExtensions.setFocusToList(toFocus, ListItemExtensions.POSITION_END);
         } else {
             removeParent(view);
@@ -372,25 +682,29 @@ public class EditorCore extends LinearLayout {
 
 
     public int removeParent(View view) {
-        int indexOfDeleteItem = parentView.indexOfChild(view);
+        int indexOfDeleteItem = this.editorSettings.parentView.indexOfChild(view);
         View nextItem = null;
+        int nextFocusIndex = -1;
         //remove hr if its on top of the delete field
-        this.parentView.removeView(view);
+        this.editorSettings.parentView.removeView(view);
         Log.d("indexOfDeleteItem", "indexOfDeleteItem : " + indexOfDeleteItem);
-        if (dividerExtensions.deleteHr(Math.max(0, indexOfDeleteItem - 1)))
-            indexOfDeleteItem -= 1;
         for (int i = 0; i < indexOfDeleteItem; i++) {
-            if (getControlType(parentView.getChildAt(i)) == EditorType.INPUT) {
-                nextItem = parentView.getChildAt(i);
+            if (getControlType(this.editorSettings.parentView.getChildAt(i)) == EditorType.INPUT) {
+                nextItem = this.editorSettings.parentView.getChildAt(i);
+                nextFocusIndex = i;
                 continue;
             }
         }
+
+        dividerExtensions.removeAllDividersBetweenDeletedAndFocusNext(indexOfDeleteItem, nextFocusIndex);
+
+
         if (nextItem != null) {
             CustomEditText text = (CustomEditText) nextItem;
             if (text.requestFocus()) {
                 text.setSelection(text.getText().length());
             }
-            this.activeView = nextItem;
+            this.editorSettings.activeView = nextItem;
         }
         return indexOfDeleteItem;
     }
@@ -400,41 +714,23 @@ public class EditorCore extends LinearLayout {
         if (content == null) {
             content = getValue("editorState", "");
         }
-        EditorContent deserialized = gson.fromJson(content, EditorContent.class);
+        EditorContent deserialized = this.editorSettings.gson.fromJson(content, EditorContent.class);
         return deserialized;
     }
 
-    public String getValue(String Key, String defaultVal) {
-        SharedPreferences _Preferences = context.getSharedPreferences(SHAREDPREFERENCE, 0);
+    private String getValue(String Key, String defaultVal) {
+        SharedPreferences _Preferences = PreferenceManager.getDefaultSharedPreferences(this.getContext());
         return _Preferences.getString(Key, defaultVal);
 
     }
 
-    public void putValue(String Key, String Value) {
-        SharedPreferences _Preferences = context.getSharedPreferences(SHAREDPREFERENCE, 0);
+    protected void putValue(String Key, String Value) {
+        SharedPreferences _Preferences = PreferenceManager.getDefaultSharedPreferences(this.getContext());
         SharedPreferences.Editor editor = _Preferences.edit();
         editor.putString(Key, Value);
         editor.apply();
     }
 
-    public String getContentAsSerialized() {
-        EditorContent state = getContent();
-        return serializeContent(state);
-    }
-
-    public String getContentAsSerialized(EditorContent state) {
-        return serializeContent(state);
-    }
-
-    public EditorContent getContentDeserialized(String EditorContentSerialized) {
-        EditorContent Deserialized = gson.fromJson(EditorContentSerialized, EditorContent.class);
-        return Deserialized;
-    }
-
-    public String serializeContent(EditorContent _state) {
-        String serialized = gson.toJson(_state);
-        return serialized;
-    }
 
     private Node getNodeInstance(View view){
         Node node = new Node();
@@ -444,146 +740,16 @@ public class EditorCore extends LinearLayout {
         return node;
     }
 
-    public EditorContent getContent() {
 
-        if (this.renderType == RenderType.Renderer) {
-            utilities.toastItOut("This option only available in editor mode");
-            return null;
-        }
-
-        int childCount = this.parentView.getChildCount();
-        EditorContent editorState = new EditorContent();
-        List<Node> list = new ArrayList<>();
-        for (int i = 0; i < childCount; i++) {
-            View view = parentView.getChildAt(i);
-            Node node = getNodeInstance(view);
-            switch (node.type) {
-                case INPUT:
-                    EditText _text = (EditText) view;
-                    EditorControl tag = (EditorControl) view.getTag();
-                    node.contentStyles = tag.editorTextStyles;
-                    node.content.add(Html.toHtml(_text.getText()));
-                    node.textSettings = tag.textSettings;
-                    list.add(node);
-                    break;
-                case img:
-                    EditorControl imgTag = (EditorControl) view.getTag();
-                    if (!TextUtils.isEmpty(imgTag.path)) {
-                        node.content.add(imgTag.path);
-
-                        /**
-                         * for subtitle
-                         */
-                        EditText textView =  view.findViewById(R.id.desc);
-                        Node subTitleNode = getNodeInstance(textView);
-                        EditorControl descTag = (EditorControl) textView.getTag();
-                        subTitleNode.contentStyles = descTag.editorTextStyles;
-                        subTitleNode.textSettings = descTag.textSettings;
-                        Editable desc = textView.getText();
-                        subTitleNode.content.add(Html.toHtml(desc));
-                        node.childs = new ArrayList<>();
-                        node.childs.add(subTitleNode);
-                        list.add(node);
-
-                    }
-                    //field type, content[]
-                    break;
-                case hr:
-                    list.add(node);
-                    break;
-                case ul:
-                case ol:
-                    node.childs = new ArrayList<>();
-                    TableLayout table = (TableLayout) view;
-                    int _rowCount = table.getChildCount();
-                    for (int j = 0; j < _rowCount; j++) {
-                        View row = table.getChildAt(j);
-                        Node node1 = getNodeInstance(row);
-                        EditText li = row.findViewById(R.id.txtText);
-                        EditorControl liTag = (EditorControl) li.getTag();
-                        node1.contentStyles = liTag.editorTextStyles;
-                        node1.content.add(Html.toHtml(li.getText()));
-                        node1.textSettings = liTag.textSettings;
-                        node1.content.add(Html.toHtml(li.getText()));
-                        node.childs.add(node1);
-                    }
-                    list.add(node);
-                    break;
-                case map:
-                    EditorControl mapTag = (EditorControl) view.getTag();
-                    Editable desc = ((CustomEditText) view.findViewById(R.id.desc)).getText();
-                    node.content.add(mapTag.Cords);
-                    node.content.add(desc.length() > 0 ? desc.toString() : "");
-                    list.add(node);
-            }
-        }
-        editorState.nodes = list;
-        return editorState;
-    }
-
-    public void renderEditor(EditorContent _state) {
-        this.parentView.removeAllViews();
-        serialRenderInProgress  = true;
-        for (Node item : _state.nodes) {
-            switch (item.type) {
-                case INPUT:
-                    String text = item.content.get(0);
-                    TextView view = inputExtensions.insertEditText(getChildCount(), this.placeHolder, text);
-                    getInputExtensions().applyTextSettings(item, view);
-                    break;
-                case hr:
-                    dividerExtensions.insertDivider(_state.nodes.indexOf(item));
-                    break;
-                case img:
-                    String path = item.content.get(0);
-                    if(getRenderType() == RenderType.Renderer) {
-                        imageExtensions.loadImage(path, item.childs.get(0));
-                    }else{
-                        View layout = imageExtensions.insertImage(null,path,getChildCount(),item.childs.get(0).content.get(0), false);
-                        getInputExtensions().applyTextSettings(item.childs.get(0), (TextView) layout.findViewById(R.id.desc));
-                    }
-                    break;
-                case ul:
-                case ol:
-                    getListItemExtensions().onRenderfromEditorState(_state, item);
-                    break;
-                case map:
-                    mapExtensions.insertMap(item.content.get(0), item.content.get(1), true);
-                    break;
-            }
-        }
-        serialRenderInProgress = false;
-    }
 
 
     public boolean isLastRow(View view) {
-        int index = this.parentView.indexOfChild(view);
-        int length = this.parentView.getChildCount();
+        int index = this.editorSettings.parentView.indexOfChild(view);
+        int length = this.editorSettings.parentView.getChildCount();
         return length - 1 == index;
     }
 
 
-    public void renderEditorFromHtml(String content) {
-        serialRenderInProgress = true;
-        htmlExtensions.parseHtml(content);
-        serialRenderInProgress = false;
-    }
-
-    public void clearAllContents() {
-        this.parentView.removeAllViews();
-
-    }
-
-    public void onBackspace(CustomEditText editText) {
-        int len = editText.getText().length();
-        int selection = editText.getSelectionStart();
-        if (selection == 0)
-            return;
-        editText.getText().delete(selection, 1);
-
-//                if(editText.requestFocus())
-//                editText.setSelection(editText.getText().length());
-    }
 
     public boolean onKey(View v, int keyCode, KeyEvent event, CustomEditText editText) {
         if (keyCode != KeyEvent.KEYCODE_DEL) {
@@ -599,7 +765,7 @@ public class EditorCore extends LinearLayout {
         int length = editText.getText().length();
         int selectionStart = editText.getSelectionStart();
 
-        EditorType editorType = getControlType(this.activeView);
+        EditorType editorType = getControlType(this.editorSettings.activeView);
         CustomEditText nextFocus;
         if (selectionStart == 0 && length > 0) {
             if ((editorType == EditorType.UL_LI || editorType == EditorType.OL_LI)) {
@@ -631,7 +797,7 @@ public class EditorCore extends LinearLayout {
         switch (control.Type) {
             case ul:
             case ol:
-                parentView.removeAllViews();
+                this.editorSettings.parentView.removeAllViews();
                 break;
         }
 
@@ -639,47 +805,33 @@ public class EditorCore extends LinearLayout {
     }
 
     public boolean isStateFresh() {
-        return stateFresh;
+        return this.editorSettings.stateFresh;
     }
 
     public void setStateFresh(boolean stateFresh) {
-        this.stateFresh = stateFresh;
+        this.editorSettings.stateFresh = stateFresh;
     }
 
     public boolean isSerialRenderInProgress() {
-        return serialRenderInProgress;
+        return this.editorSettings.serialRenderInProgress;
     }
 
     public void setSerialRenderInProgress(boolean serialRenderInProgress) {
-        this.serialRenderInProgress = serialRenderInProgress;
+        this.editorSettings.serialRenderInProgress = serialRenderInProgress;
     }
 
-    public class Utilities {
-        public int[] getScreenDimension() {
-            Display display = ((Activity) context).getWindowManager().getDefaultDisplay();
-            Point size = new Point();
-            display.getSize(size);
-            int width = size.x;
-            int height = size.y;
-            int[] dimen = {width, height};
-            return dimen;
-        }
 
-        public void toastItOut(String message) {
-            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
-        }
+    public String getPlaceHolder() {
+        return editorSettings.placeHolder;
+    }
 
-        public boolean containsString(String text){
-             String HTML_PATTERN = "<(\"[^\"]*\"|'[^']*'|[^'\">])*>";
-             Pattern pattern = Pattern.compile(HTML_PATTERN);
-                Matcher matcher = pattern.matcher(text);
-                return matcher.matches();
-        }
+    public boolean getAutoFucus() {
+        return editorSettings.autoFocus;
+    }
 
-        public int dpToPixel(float dp) {
-            DisplayMetrics metrics = context.getResources().getDisplayMetrics();
-            float px = dp * (metrics.densityDpi / 160f);
-            return (int) px;
-        }
+    @Override
+    public boolean onTouch(View view, MotionEvent motionEvent) {
+        ___onViewTouched(view, motionEvent);
+        return false;
     }
 }

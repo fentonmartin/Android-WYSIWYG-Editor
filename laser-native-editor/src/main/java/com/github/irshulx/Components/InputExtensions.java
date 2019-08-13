@@ -15,6 +15,7 @@
  */
 package com.github.irshulx.Components;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.graphics.Color;
@@ -25,10 +26,13 @@ import android.support.v7.view.ContextThemeWrapper;
 import android.text.Editable;
 import android.text.Html;
 import android.text.InputType;
+import android.text.Spannable;
+import android.text.SpannableString;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.text.style.QuoteSpan;
 import android.text.util.Linkify;
 import android.util.Log;
 import android.util.TypedValue;
@@ -40,12 +44,16 @@ import android.widget.EditText;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import com.github.irshulx.EditorComponent;
 import com.github.irshulx.EditorCore;
 import com.github.irshulx.R;
 import com.github.irshulx.Utilities.FontCache;
+import com.github.irshulx.Utilities.Utilities;
+import com.github.irshulx.models.EditorContent;
 import com.github.irshulx.models.EditorTextStyle;
 import com.github.irshulx.models.EditorControl;
 import com.github.irshulx.models.EditorType;
+import com.github.irshulx.models.HtmlTag;
 import com.github.irshulx.models.Node;
 import com.github.irshulx.models.Op;
 import com.github.irshulx.models.RenderType;
@@ -56,15 +64,18 @@ import org.jsoup.nodes.Document;
 import org.jsoup.nodes.Element;
 import org.jsoup.select.Elements;
 
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static com.github.irshulx.models.TextSetting.TEXT_COLOR;
+
 /**
  * Created by mkallingal on 4/30/2016.
  */
-public class InputExtensions {
+public class InputExtensions extends EditorComponent {
     public static final int HEADING = 0;
     public static final int CONTENT = 1;
     private String DEFAULT_TEXT_COLOR = "#000000";
@@ -146,7 +157,66 @@ public class InputExtensions {
     }
 
 
+    @Override
+    public Node getContent(View view) {
+        Node node = this.getNodeInstance(view);
+        EditText _text = (EditText) view;
+        EditorControl tag = (EditorControl) view.getTag();
+        node.contentStyles = tag.editorTextStyles;
+        node.content.add(Html.toHtml(_text.getText()));
+        node.textSettings = tag.textSettings;
+        return node;
+    }
+
+    @Override
+    public String getContentAsHTML(Node node, EditorContent content) {
+        String html = getInputHtml(node);
+        return html;
+    }
+
+    @Override
+    public void renderEditorFromState(Node node, EditorContent content) {
+        String text = node.content.get(0);
+        TextView view = insertEditText(editorCore.getChildCount(), editorCore.getPlaceHolder(), text);
+        applyTextSettings(node, view);
+    }
+
+    @Override
+    public Node buildNodeFromHTML(Element element) {
+        String text;
+        int count;
+        TextView tv;
+        HtmlTag tag = HtmlTag.valueOf(element.tagName().toLowerCase());
+        switch (tag){
+            case h1:
+            case h2:
+            case h3:
+                RenderHeader(tag, element);
+                break;
+            case p:
+            case div:
+                text = element.html();
+                count = editorCore.getParentView().getChildCount();
+                tv = insertEditText(count, null, text);
+                applyStyles(tv, element);
+                break;
+            case blockquote:
+                text = element.html();
+                count = editorCore.getParentView().getChildCount();
+                tv = insertEditText(count, null, text);
+                UpdateTextStyle(EditorTextStyle.BLOCKQUOTE,tv);
+                applyStyles(tv, element);
+        }
+        return null;
+    }
+
+    @Override
+    public void init(ComponentsWrapper componentsWrapper) {
+        this.componentsWrapper = componentsWrapper;
+    }
+
     public InputExtensions(EditorCore editorCore) {
+        super(editorCore);
         this.editorCore = editorCore;
     }
 
@@ -166,7 +236,6 @@ public class InputExtensions {
         final TextView textView = new TextView(new ContextThemeWrapper(this.editorCore.getContext(), R.style.WysiwygEditText));
         addEditableStyling(textView);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.setMargins(0, 0, 0, (int) editorCore.getContext().getResources().getDimension(R.dimen.edittext_margin_bottom));
         textView.setLayoutParams(params);
         if (!TextUtils.isEmpty(text)) {
             Spanned __ = Html.fromHtml(text.toString());
@@ -183,7 +252,7 @@ public class InputExtensions {
 
     public void setLineSpacing(TextView textView, float lineHeight) {
         int fontHeight = textView.getPaint().getFontMetricsInt(null);
-        textView.setLineSpacing(editorCore.getUtilitiles().dpToPixel(lineHeight)-fontHeight, 1);
+        textView.setLineSpacing(Utilities.dpToPx(editorCore.getContext(), lineHeight)-fontHeight, 1);
     }
 
     public CustomEditText getNewEditTextInst(final String hint, CharSequence text) {
@@ -305,24 +374,14 @@ public class InputExtensions {
         editText.setFocusableInTouchMode(true);
         editText.setTextSize(TypedValue.COMPLEX_UNIT_SP, NORMALTEXTSIZE);
         editText.setTextColor(Color.parseColor(this.DEFAULT_TEXT_COLOR));
-
+        editText.setPadding(0,30,0,30);
     }
 
-
-    private void getText(int index) {
-        View view = editorCore.getParentView().getChildAt(index);
-        EditorType type = editorCore.getControlType(view);
-        if (type != EditorType.INPUT)
-            return;
-        TextView tv = (TextView) view;
-        tv.setHint(editorCore.placeHolder);
-    }
 
 
     public TextView insertEditText(int position, String hint, CharSequence text) {
-        String nextHint = isLastText(position) ? null : editorCore.placeHolder;
+        String nextHint = isLastText(position) ? null : editorCore.getPlaceHolder();
         if (editorCore.getRenderType() == RenderType.Editor) {
-
 
             /**
              * when user press enter from first line without keyin anything, need to remove the placeholder from that line 0...
@@ -360,10 +419,9 @@ public class InputExtensions {
 
 
     private EditorControl reWriteTags(EditorControl tag, EditorTextStyle styleToAdd) {
-        tag = editorCore.updateTagStyle(tag, EditorTextStyle.H1, Op.Delete);
-        tag = editorCore.updateTagStyle(tag, EditorTextStyle.H2, Op.Delete);
-        tag = editorCore.updateTagStyle(tag, EditorTextStyle.H3, Op.Delete);
-        tag = editorCore.updateTagStyle(tag, EditorTextStyle.NORMAL, Op.Delete);
+        EditorTextStyle[] tags = {EditorTextStyle.H1,EditorTextStyle.H2,EditorTextStyle.H3,EditorTextStyle.NORMAL};
+        for(EditorTextStyle style: tags)
+            tag = editorCore.updateTagStyle(tag, style, Op.Delete);
         tag = editorCore.updateTagStyle(tag, styleToAdd, Op.Insert);
         return tag;
     }
@@ -465,6 +523,12 @@ public class InputExtensions {
             }
             EditorControl tag = editorCore.getControlTag(editText);
 
+            int pBottom = editText.getPaddingBottom();
+            int pRight = editText.getPaddingRight();
+            int pTop = editText.getPaddingTop();
+
+
+
             if (isEditorTextStyleHeaders(style)) {
                 updateTextStyle(editText, style);
                 return;
@@ -479,9 +543,6 @@ public class InputExtensions {
                 return;
             }
             if (style == EditorTextStyle.INDENT) {
-                int pBottom = editText.getPaddingBottom();
-                int pRight = editText.getPaddingRight();
-                int pTop = editText.getPaddingTop();
                 if (editorCore.containsStyle(tag.editorTextStyles, EditorTextStyle.INDENT)) {
                     tag = editorCore.updateTagStyle(tag, EditorTextStyle.INDENT, Op.Delete);
                     editText.setPadding(0, pTop, pRight, pBottom);
@@ -492,20 +553,33 @@ public class InputExtensions {
                     editText.setTag(tag);
                 }
             } else if (style == EditorTextStyle.OUTDENT) {
-                int pBottom = editText.getPaddingBottom();
-                int pRight = editText.getPaddingRight();
-                int pTop = editText.getPaddingTop();
                 if (editorCore.containsStyle(tag.editorTextStyles, EditorTextStyle.INDENT)) {
                     tag = editorCore.updateTagStyle(tag, EditorTextStyle.INDENT, Op.Delete);
                     editText.setPadding(0, pTop, pRight, pBottom);
                     editText.setTag(tag);
                 }
+            } else if( style == EditorTextStyle.BLOCKQUOTE){
+                LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) editText.getLayoutParams();
+                if (editorCore.containsStyle(tag.editorTextStyles, EditorTextStyle.BLOCKQUOTE)) {
+                    tag = editorCore.updateTagStyle(tag, EditorTextStyle.BLOCKQUOTE, Op.Delete);
+                    editText.setPadding(0, pTop, pRight, pBottom);
+                    editText.setBackgroundDrawable(ContextCompat.getDrawable(this.editorCore.getContext(), R.drawable.invisible_edit_text));
+                    params.setMargins(0, 0, 0, (int) editorCore.getContext().getResources().getDimension(R.dimen.edittext_margin_bottom));
+                }else{
+                    float marginExtra =  editorCore.getContext().getResources().getDimension(R.dimen.edittext_margin_bottom)*1.5f;
+                    tag = editorCore.updateTagStyle(tag, EditorTextStyle.BLOCKQUOTE, Op.Insert);
+                    editText.setPadding(30, pTop, 30, pBottom);
+                    editText.setBackgroundDrawable(editText.getContext().getResources().getDrawable(R.drawable.block_quote_background));
+                    params.setMargins(0, (int)marginExtra, 0, (int) marginExtra);
+                }
+                editText.setTag(tag);
             }
         } catch (Exception e) {
 
         }
-
     }
+
+
 
     public void insertLink() {
         final AlertDialog.Builder inputAlert = new AlertDialog.Builder(this.editorCore.getContext());
@@ -611,7 +685,7 @@ public class InputExtensions {
     }
 
     public void setFocus(CustomEditText view) {
-        if (editorCore.isStateFresh() && !editorCore.autoFocus) {
+        if (editorCore.isStateFresh() && !editorCore.getAutoFucus()) {
             editorCore.setStateFresh(false);
             return;
         }
@@ -635,7 +709,7 @@ public class InputExtensions {
                 continue;
             }
             if (editorType == EditorType.ol || editorType == EditorType.ul) {
-                editorCore.getListItemExtensions().setFocusToList(view, ListItemExtensions.POSITION_START);
+                componentsWrapper.getListItemExtensions().setFocusToList(view, ListItemExtensions.POSITION_START);
                 editorCore.setActiveView(view);
             }
         }
@@ -653,10 +727,14 @@ public class InputExtensions {
                 break;
             }
             if (editorType == EditorType.ol || editorType == EditorType.ul) {
-                editorCore.getListItemExtensions().setFocusToList(view, ListItemExtensions.POSITION_START);
+                componentsWrapper.getListItemExtensions().setFocusToList(view, ListItemExtensions.POSITION_START);
                 editorCore.setActiveView(view);
             }
         }
+    }
+
+    public boolean isInputTextAtPosition(int position){
+        return editorCore.getControlType(editorCore.getParentView().getChildAt(position)) == EditorType.INPUT;
     }
 
 
@@ -691,10 +769,81 @@ public class InputExtensions {
     }
 
     public void applyStyles(TextView editText, Element element) {
-        Map<String, String> styles = editorCore.getHtmlExtensions().getStyleMap(element);
+        Map<String, String> styles = componentsWrapper.getHtmlExtensions().getStyleMap(element);
         if(styles.containsKey("color")){
             updateTextColor(styles.get("color"),editText);
         }
+    }
+
+    public String getInputHtml(Node item) {
+        boolean isParagraph = true;
+        String tmpl = componentsWrapper.getHtmlExtensions().getTemplateHtml(item.type);
+        //  CharSequence content= android.text.Html.fromHtml(item.content.get(0)).toString();
+        //  CharSequence trimmed= editorCore.getInputExtensions().noTrailingwhiteLines(content);
+        String trimmed = Jsoup.parse(item.content.get(0)).body().select("p").html();
+        Map<Enum, String> styles = new HashMap<>();
+        if (item.contentStyles.size() > 0) {
+            for (EditorTextStyle style : item.contentStyles) {
+                switch (style) {
+                    case BOLD:
+                        tmpl = tmpl.replace("{{$content}}", "<b>{{$content}}</b>");
+                        break;
+                    case BOLDITALIC:
+                        tmpl = tmpl.replace("{{$content}}", "<b><i>{{$content}}</i></b>");
+                        break;
+                    case ITALIC:
+                        tmpl = tmpl.replace("{{$content}}", "<i>{{$content}}</i>");
+                        break;
+                    case INDENT:
+                        styles.put(style, "margin-left:25px");
+                        break;
+                    case OUTDENT:
+                        styles.put(style, "margin-left:0");
+                        break;
+                    case H1:
+                        tmpl = tmpl.replace("{{$tag}}", "h1");
+                        isParagraph = false;
+                        break;
+                    case H2:
+                        tmpl = tmpl.replace("{{$tag}}", "h2");
+                        isParagraph = false;
+                        break;
+                    case H3:
+                        tmpl = tmpl.replace("{{$tag}}", "h3");
+                        isParagraph = false;
+                        break;
+                    case BLOCKQUOTE:
+                        tmpl = tmpl.replace("{{$tag}}", "blockquote");
+                        isParagraph = false;
+                        break;
+                    case NORMAL:
+                        tmpl = tmpl.replace("{{$tag}}", "p");
+                        isParagraph = true;
+                        break;
+                }
+            }
+        }
+
+        styles.put(TEXT_COLOR, "color:" + item.textSettings.getTextColor());
+
+        if (item.type == EditorType.OL_LI || item.type == EditorType.UL_LI) {
+            tmpl = tmpl.replace("{{$tag}}", "span");
+        } else if (isParagraph) {
+            tmpl = tmpl.replace("{{$tag}}", "p");
+        }
+        tmpl = tmpl.replace("{{$content}}", trimmed);
+        tmpl = tmpl.replace(" {{$style}}", createStyleTag(styles));
+        return tmpl;
+    }
+
+    private String createStyleTag(Map<Enum, String> styles) {
+        String tmpl = " style=\"{{builder}}\"";
+        StringBuilder builder = new StringBuilder();
+        for (Map.Entry<Enum, String> style : styles.entrySet()) {
+            builder.append(style.getValue()).append(";");
+        }
+        tmpl = tmpl.replace("{{builder}}", builder);
+        return tmpl;
     }
 
     public void applyTextSettings(Node node, TextView view){
@@ -707,6 +856,22 @@ public class InputExtensions {
                 updateTextColor(node.textSettings.getTextColor(), view);
             }
         }
+    }
+
+    public void RenderHeader(HtmlTag tag, Element element) {
+        int count = editorCore.getParentView().getChildCount();
+        String text = componentsWrapper.getHtmlExtensions().getHtmlSpan(element);
+        TextView editText = insertEditText(count, null, text);
+        EditorTextStyle style = tag == HtmlTag.h1 ? EditorTextStyle.H1 : tag == HtmlTag.h2 ? EditorTextStyle.H2 : EditorTextStyle.H3;
+        UpdateTextStyle(style, editText);
+        applyStyles(editText, element);
+    }
+
+    public void removeFocus(CustomEditText editText) {
+        editText.clearFocus();
+        InputMethodManager imm = (InputMethodManager) editorCore.getActivity().getSystemService(Context.INPUT_METHOD_SERVICE);
+        imm.hideSoftInputFromWindow(editText.getWindowToken(), 0);
+        editorCore.getParentView().removeView(editText);
     }
 
     public void setLineSpacing(float lineSpacing) {
